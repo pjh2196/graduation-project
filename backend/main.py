@@ -73,3 +73,5 @@ def payment(req: PaymentRequest):
 @app.get("/history")
 def history(limit: int = 20):
     return payments[-limit:]
+
+# 업데이트 확인
