@@ -1,77 +1,136 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from datetime import datetime
-from typing import Optional, List, Dict
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
 from uuid import uuid4
+
+from database import SessionLocal, engine, Base
+from models import User, Wallet, QRToken, Payment
+from schemas import IssueTokenRequest, PaymentRequest, PaymentResponse
 
 app = FastAPI()
 
-class PaymentRequest(BaseModel):
-    token: str
-    createdAt: str
-    price: int
-    store_id: Optional[str] = None
+Base.metadata.create_all(bind=engine)
 
-class PaymentRecord(BaseModel):
-    id: str
-    token: str
-    createdAt: str
-    price: int
-    store_id: Optional[str] = None
-    cash_to_pay: int
-    diff: int
-    balance_after: int
-    received_at: str
-
-payments: List[PaymentRecord] = []
-
-# 토큰별 잔돈(잔액) 저장 (DB 없으니까 메모리)
-balances: Dict[str, int] = {}
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-@app.post("/payment")
-def payment(req: PaymentRequest):
-    prev = balances.get(req.token, 0)
+@app.post("/setup-user")
+def setup_user(user_id: str, name: str | None = None, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        user = User(id=user_id, name=name)
+        db.add(user)
+        db.commit()
 
+    wallet = db.query(Wallet).filter(Wallet.user_id == user_id).first()
+    if wallet is None:
+        wallet = Wallet(user_id=user_id, balance=0)
+        db.add(wallet)
+        db.commit()
+
+    return {"message": "user ready", "user_id": user_id}
+
+@app.post("/issue-token")
+def issue_token(req: IssueTokenRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == req.user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    wallet = db.query(Wallet).filter(Wallet.user_id == req.user_id).first()
+    if wallet is None:
+        wallet = Wallet(user_id=req.user_id, balance=0)
+        db.add(wallet)
+        db.commit()
+
+    token = str(uuid4())
+    qr = QRToken(
+        token=token,
+        user_id=req.user_id,
+        issued_at=datetime.utcnow(),
+        expires_at=datetime.utcnow() + timedelta(minutes=5),
+        is_used=False
+    )
+    db.add(qr)
+    db.commit()
+
+    return {
+        "qr_token": token,
+        "expires_at": qr.expires_at.isoformat()
+    }
+
+@app.post("/payment", response_model=PaymentResponse)
+def payment(req: PaymentRequest, db: Session = Depends(get_db)):
+    qr = db.query(QRToken).filter(QRToken.token == req.qr_token).first()
+    if qr is None:
+        raise HTTPException(status_code=404, detail="QR token not found")
+
+    if qr.is_used:
+        raise HTTPException(status_code=400, detail="QR token already used")
+
+    if qr.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="QR token expired")
+
+    wallet = db.query(Wallet).filter(Wallet.user_id == qr.user_id).first()
+    if wallet is None:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    balance_before = wallet.balance
     remainder = req.price % 10
 
     if remainder == 0:
         cash_to_pay = req.price
         diff = 0
-        balance_after = prev
+        balance_after = balance_before
     else:
-        if prev >= remainder:
+        if balance_before >= remainder:
             cash_to_pay = req.price - remainder
             diff = -remainder
-            balance_after = prev - remainder
+            balance_after = balance_before - remainder
         else:
             add = 10 - remainder
             cash_to_pay = req.price + add
             diff = add
-            balance_after = prev + add
+            balance_after = balance_before + add
 
-    balances[req.token] = balance_after
+    wallet.balance = balance_after
+    qr.is_used = True
 
-    record = PaymentRecord(
+    payment_row = Payment(
         id=str(uuid4()),
-        token=req.token,
-        createdAt=req.createdAt,
+        user_id=qr.user_id,
+        qr_token=qr.token,
         price=req.price,
-        store_id=req.store_id,
         cash_to_pay=cash_to_pay,
         diff=diff,
+        balance_before=balance_before,
         balance_after=balance_after,
-        received_at=datetime.utcnow().isoformat()
+        store_id=req.store_id,
+        received_at=datetime.utcnow()
     )
 
-    payments.append(record)
-    return record
+    db.add(payment_row)
+    db.commit()
 
-@app.get("/history")
-def history(limit: int = 20):
-    return payments[-limit:]
+    return PaymentResponse(
+        cash_to_pay=cash_to_pay,
+        diff=diff,
+        balance_after=balance_after
+    )
 
-# 업데이트 확인
+@app.get("/history/{user_id}")
+def history(user_id: str, db: Session = Depends(get_db)):
+    rows = (
+        db.query(Payment)
+        .filter(Payment.user_id == user_id)
+        .order_by(Payment.received_at.desc())
+        .all()
+    )
+    return rows
