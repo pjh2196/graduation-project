@@ -38,7 +38,6 @@ class Payment(Base):
     balance_after = Column(Integer, nullable=False)
     store_id = Column(String, nullable=True)
     received_at = Column(DateTime, default=datetime.utcnow)
-    is_cancelled = Column(Boolean, default=False)
 
 class PendingPayment(Base):
     __tablename__ = "pending_payments"

@@ -53,15 +53,3 @@ class ConfirmPaymentRequest(BaseModel):
 
 class CancelPaymentRequest(BaseModel):
     pending_id: str
-
-
-
-class CancelConfirmedPaymentRequest(BaseModel):
-    payment_id: str
-
-
-class CancelConfirmedPaymentResponse(BaseModel):
-    payment_id: str
-    user_id: str
-    restored_balance: int
-    message: str

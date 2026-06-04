@@ -38,20 +38,3 @@ class Payment(Base):
     balance_after = Column(Integer, nullable=False)
     store_id = Column(String, nullable=True)
     received_at = Column(DateTime, default=datetime.utcnow)
-    is_cancelled = Column(Boolean, default=False)
-
-class PendingPayment(Base):
-    __tablename__ = "pending_payments"
-
-    id = Column(String, primary_key=True, index=True)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    qr_token = Column(String, ForeignKey("qr_tokens.token"), nullable=False)
-    price = Column(Integer, nullable=False)
-    cash_to_pay = Column(Integer, nullable=False)
-    diff = Column(Integer, nullable=False)
-    balance_before = Column(Integer, nullable=False)
-    balance_after = Column(Integer, nullable=False)
-    store_id = Column(String, nullable=True)
-    status = Column(String, default="pending")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    expires_at = Column(DateTime, nullable=False)

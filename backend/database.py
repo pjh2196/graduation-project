@@ -1,12 +1,11 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = "sqlite:///./app.db"
+DATABASE_URL = "postgresql://postgres:postgres123@mydb.czumaoimmxa2.ap-southeast-2.rds.amazonaws.com:5432/mydb"
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False}
-)
+   )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

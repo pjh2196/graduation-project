@@ -12,9 +12,7 @@ from schemas import (
     PaymentResponse,
     PreviewPaymentResponse,
     ConfirmPaymentRequest,
-    CancelPaymentRequest,
-    CancelConfirmedPaymentRequest,
-    CancelConfirmedPaymentResponse
+    CancelPaymentRequest
 )
 
 app = FastAPI()
@@ -284,9 +282,7 @@ def confirm_payment(req: ConfirmPaymentRequest, db: Session = Depends(get_db)):
 
 
 @app.post("/cancel-payment")
-def cancel_payment(req: CancelPaymentRequest,
-    CancelConfirmedPaymentRequest,
-    CancelConfirmedPaymentResponse, db: Session = Depends(get_db)):
+def cancel_payment(req: CancelPaymentRequest, db: Session = Depends(get_db)):
     pending = db.query(PendingPayment).filter(PendingPayment.id == req.pending_id).first()
     if pending is None:
         raise HTTPException(status_code=404, detail="Pending payment not found")
@@ -372,85 +368,6 @@ def payment(req: PaymentRequest, db: Session = Depends(get_db)):
         cash_to_pay=cash_to_pay,
         diff=diff,
         balance_after=balance_after
-    )
-
-
-
-
-@app.get("/latest-payment-status/{user_id}", response_model=Optional[PreviewPaymentResponse])
-def latest_payment_status(user_id: str, db: Session = Depends(get_db)):
-    now = datetime.utcnow()
-    limit_time = now - timedelta(minutes=10)
-
-    latest = (
-        db.query(PendingPayment)
-        .filter(
-            PendingPayment.user_id == user_id,
-            PendingPayment.created_at >= limit_time
-        )
-        .order_by(PendingPayment.created_at.desc())
-        .first()
-    )
-
-    if latest is None:
-        return None
-
-    return PreviewPaymentResponse(
-        pending_id=latest.id,
-        user_id=latest.user_id,
-        price=latest.price,
-        cash_to_pay=latest.cash_to_pay,
-        diff=latest.diff,
-        balance_before=latest.balance_before,
-        balance_after=latest.balance_after,
-        store_id=latest.store_id,
-        status=latest.status,
-        created_at=latest.created_at,
-        expires_at=latest.expires_at
-    )
-
-
-
-
-@app.post("/cancel-confirmed-payment", response_model=CancelConfirmedPaymentResponse)
-def cancel_confirmed_payment(req: CancelConfirmedPaymentRequest, db: Session = Depends(get_db)):
-    payment = db.query(Payment).filter(Payment.id == req.payment_id).first()
-    if payment is None:
-        raise HTTPException(status_code=404, detail="Payment not found")
-
-    if payment.is_cancelled:
-        raise HTTPException(status_code=400, detail="Payment already cancelled")
-
-    latest_payment = (
-        db.query(Payment)
-        .filter(
-            Payment.user_id == payment.user_id,
-            Payment.is_cancelled == False
-        )
-        .order_by(Payment.received_at.desc())
-        .first()
-    )
-
-    if latest_payment is None or latest_payment.id != payment.id:
-        raise HTTPException(
-            status_code=400,
-            detail="Only the latest payment can be cancelled"
-        )
-
-    wallet = db.query(Wallet).filter(Wallet.user_id == payment.user_id).first()
-    if wallet is None:
-        raise HTTPException(status_code=404, detail="Wallet not found")
-
-    wallet.balance = payment.balance_before
-    payment.is_cancelled = True
-
-    db.commit()
-
-    return CancelConfirmedPaymentResponse(
-        payment_id=payment.id,
-        user_id=payment.user_id,
-        restored_balance=wallet.balance,
-        message="payment cancelled"
     )
 
 
