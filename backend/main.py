@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime, timedelta
 from uuid import uuid4
 from typing import Optional
@@ -259,8 +260,10 @@ def confirm_payment(req: ConfirmPaymentRequest, db: Session = Depends(get_db)):
     qr.is_used = True
     pending.status = "confirmed"
 
+    next_payment_id = (db.query(func.max(Payment.id)).scalar() or 0) + 1
+
     payment_row = Payment(
-        id=str(uuid4()),
+        id=next_payment_id,
         user_id=pending.user_id,
         qr_token=pending.qr_token,
         price=pending.price,
@@ -284,9 +287,7 @@ def confirm_payment(req: ConfirmPaymentRequest, db: Session = Depends(get_db)):
 
 
 @app.post("/cancel-payment")
-def cancel_payment(req: CancelPaymentRequest,
-    CancelConfirmedPaymentRequest,
-    CancelConfirmedPaymentResponse, db: Session = Depends(get_db)):
+def cancel_payment(req: CancelPaymentRequest, db: Session = Depends(get_db)):
     pending = db.query(PendingPayment).filter(PendingPayment.id == req.pending_id).first()
     if pending is None:
         raise HTTPException(status_code=404, detail="Pending payment not found")
@@ -352,7 +353,6 @@ def payment(req: PaymentRequest, db: Session = Depends(get_db)):
     qr.is_used = True
 
     payment_row = Payment(
-        id=str(uuid4()),
         user_id=qr.user_id,
         qr_token=qr.token,
         price=req.price,
@@ -447,8 +447,10 @@ def cancel_confirmed_payment(req: CancelConfirmedPaymentRequest, db: Session = D
     db.commit()
 
     return CancelConfirmedPaymentResponse(
-        payment_id=payment.id,
+        payment_id=str(payment.id),
         user_id=payment.user_id,
+        price=payment.price,
+        cash_to_refund=payment.cash_to_pay,
         restored_balance=wallet.balance,
         message="payment cancelled"
     )

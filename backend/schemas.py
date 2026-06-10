@@ -63,5 +63,7 @@ class CancelConfirmedPaymentRequest(BaseModel):
 class CancelConfirmedPaymentResponse(BaseModel):
     payment_id: str
     user_id: str
+    price: int
+    cash_to_refund: int
     restored_balance: int
     message: str
