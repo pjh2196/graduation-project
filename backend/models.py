@@ -28,7 +28,7 @@ class QRToken(Base):
 class Payment(Base):
     __tablename__ = "payments"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     qr_token = Column(String, ForeignKey("qr_tokens.token"), nullable=False)
     price = Column(Integer, nullable=False)
@@ -55,3 +55,4 @@ class PendingPayment(Base):
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
+id = Column(Integer, primary_key=True, index=True, autoincrement=True)

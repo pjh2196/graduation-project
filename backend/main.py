@@ -260,19 +260,16 @@ def confirm_payment(req: ConfirmPaymentRequest, db: Session = Depends(get_db)):
     qr.is_used = True
     pending.status = "confirmed"
 
-    next_payment_id = (db.query(func.max(Payment.id)).scalar() or 0) + 1
-
     payment_row = Payment(
-        id=next_payment_id,
-        user_id=pending.user_id,
-        qr_token=pending.qr_token,
-        price=pending.price,
-        cash_to_pay=pending.cash_to_pay,
-        diff=pending.diff,
-        balance_before=pending.balance_before,
-        balance_after=pending.balance_after,
-        store_id=pending.store_id,
-        received_at=now
+    user_id=pending.user_id,
+    qr_token=pending.qr_token,
+    price=pending.price,
+    cash_to_pay=pending.cash_to_pay,
+    diff=pending.diff,
+    balance_before=pending.balance_before,
+    balance_after=pending.balance_after,
+    store_id=pending.store_id,
+    received_at=now
     )
 
     db.add(payment_row)
